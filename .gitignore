@@ -1,0 +1,42 @@
+# ==========================================
+# .gitignore para Java + Spring Boot
+# ==========================================
+
+# Archivos compilados
+*.class
+
+# Logs
+*.log
+
+# Archivos empaquetados
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+
+# Directorio de compilacion de Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Configuraciones de IDEs (VS Code, IntelliJ, Eclipse)
+.vscode/
+.idea/
+*.iml
+*.iws
+.classpath
+.project
+.settings/
+.metadata/
+
+# Archivos del sistema operativo (Windows/Mac)
+Thumbs.db
+.DS_Store
