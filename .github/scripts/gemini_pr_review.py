@@ -38,14 +38,13 @@ def read_diff(path: str) -> str:
     return diff
 
 
-def call_gemini(api_key: str, model: str, prompt: str) -> dict:
+def call_gemini(api_key: str, model: str, prompt: str) -> str:
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.2,
             "maxOutputTokens": 8192,
             "thinkingConfig": {"thinkingBudget": 0},
-            "responseMimeType": "application/json",
         },
     }
     url = GEMINI_ENDPOINT.format(model=model, key=api_key)
@@ -70,11 +69,7 @@ def call_gemini(api_key: str, model: str, prompt: str) -> dict:
     text = "".join(part.get("text", "") for part in parts).strip()
     if not text:
         raise RuntimeError(f"Gemini returned empty text: {json.dumps(body)[:1000]}")
-
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Gemini returned invalid JSON: {text[:1000]}") from exc
+    return text
 
 
 def post_pr_comment(repo: str, pr_number: str, body: str, token: str) -> None:
@@ -110,9 +105,7 @@ Rules:
 - Prioritize bugs, security, validation, error handling, design, and missing tests.
 - If something looks good, say so briefly.
 - Do not invent files or lines that are not in the diff.
-- Set has_critical to true ONLY if there is at least one real Critical finding.
-- If Critical is None / empty, has_critical must be false.
-- review_markdown must use this markdown format:
+- Use this markdown format:
 
 ## Summary
 (2-4 sentences)
@@ -127,12 +120,6 @@ Rules:
 
 If a category has no findings, write "None".
 
-Return ONLY valid JSON with this shape:
-{{
-  "has_critical": boolean,
-  "review_markdown": string
-}}
-
 DIFF:
 ```diff
 {diff}
@@ -140,23 +127,16 @@ DIFF:
 """
 
 
-def has_critical_findings(payload: dict, review_markdown: str) -> bool:
-    if isinstance(payload.get("has_critical"), bool):
-        flagged = payload["has_critical"]
-    else:
-        flagged = False
-
-    # Fallback if the model forgets the boolean but still writes Critical findings.
+def has_critical_findings(review_markdown: str) -> bool:
     match = re.search(
         r"\*\*Critical:\*\*\s*(.+?)(?:\n- \*\*|\n## |\Z)",
         review_markdown,
         flags=re.IGNORECASE | re.DOTALL,
     )
-    if match:
-        value = match.group(1).strip().lower()
-        if value and value not in {"none", "n/a", "na", "no", "-", "none."}:
-            return True
-    return flagged
+    if not match:
+        return False
+    value = match.group(1).strip().lower()
+    return bool(value) and value not in {"none", "n/a", "na", "no", "-", "none."}
 
 
 def main() -> int:
@@ -170,39 +150,31 @@ def main() -> int:
     diff = read_diff(diff_path)
 
     try:
-        payload = call_gemini(api_key, model, build_prompt(diff))
+        review = call_gemini(api_key, model, build_prompt(diff))
     except RuntimeError as exc:
-        # Do not block merges on quota/API outages (free tier).
+        # Real API/transport failure only. Do not block merges on free-tier outages.
+        print(f"Gemini API unavailable; not failing the check. Detail: {exc}")
         message = (
             "## Gemini Code Review\n\n"
             f"_Model: `{model}`_\n\n"
-            "Review could not be completed because the Gemini API failed.\n\n"
-            f"```\n{exc}\n```\n"
+            "Could not reach the Gemini API, so this review was skipped.\n"
         )
         try:
             post_pr_comment(repo, pr_number, message, token)
         except RuntimeError as comment_exc:
-            print(f"Failed to post API-error comment: {comment_exc}", file=sys.stderr)
-        print(f"Gemini API unavailable; not failing the check. Detail: {exc}")
+            print(f"Failed to post skip comment: {comment_exc}", file=sys.stderr)
         return 0
 
-    review_markdown = str(payload.get("review_markdown") or "").strip()
-    if not review_markdown:
-        print("Gemini JSON missing review_markdown; failing closed.", file=sys.stderr)
-        return 1
-
-    critical = has_critical_findings(payload, review_markdown)
-    status = "FAILED (critical findings)" if critical else "PASSED"
     comment = (
         "## Gemini Code Review\n\n"
         f"_Model: `{model}`_\n\n"
-        f"**Check status:** {status}\n\n"
-        f"{review_markdown}\n"
+        f"{review}\n"
     )
     post_pr_comment(repo, pr_number, comment, token)
     print("Review posted successfully.")
 
-    if critical:
+    # Blocking is a review decision, not an API error: fail the Actions check only.
+    if has_critical_findings(review):
         print("Critical findings detected; failing the GitHub check.")
         return 1
     return 0
