@@ -1,1 +1,1 @@
-# Nuestro Primer Proyecto Ajedrez
+# Proyecto Ajedrez
