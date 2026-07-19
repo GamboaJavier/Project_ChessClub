@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class ChessclubApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(ChessclubApplicatsssion.class, args);
+		SpringApplication.run(ChessclubApplication.class, args);
 	}
 
 }
