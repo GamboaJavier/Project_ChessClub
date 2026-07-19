@@ -1,4 +1,4 @@
-# Chess_Club
+# Chess_Clu
 # Chess Club Backend
 
 The backend system for the university open chess tournament, designed to manage player registrations, tournament logic, and match processing. This project is built with professional software engineering practices, prioritizing modularity, security, and maintainability.
