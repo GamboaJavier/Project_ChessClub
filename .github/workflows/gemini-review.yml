@@ -11,8 +11,6 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
-    # Soft review: do not block merges if Gemini fails
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
