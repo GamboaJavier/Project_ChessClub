@@ -46,14 +46,3 @@ Thumbs.db
 .env.local
 .env.*.local
 __pycache__/
-.venv/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.vscode/
-.idea/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.vscode/
-.idea/
