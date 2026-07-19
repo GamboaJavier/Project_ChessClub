@@ -15,6 +15,10 @@ GEMINI_ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "{model}:generateContent?key={key}"
 )
+NONE_VALUES = {"none", "n/a", "na", "no", "-", "none.", "n/a."}
+BLOCKING_LINE_RE = re.compile(
+    r"(?im)^\s*BLOCKING:\s*(true|false)\s*$"
+)
 
 
 def require_env(name: str) -> str:
@@ -105,7 +109,7 @@ Rules:
 - Prioritize bugs, security, validation, error handling, design, and missing tests.
 - If something looks good, say so briefly.
 - Do not invent files or lines that are not in the diff.
-- Use this markdown format:
+- Use this markdown format for the review body:
 
 ## Summary
 (2-4 sentences)
@@ -120,6 +124,14 @@ Rules:
 
 If a category has no findings, write "None".
 
+After the markdown review, add exactly one final line (machine-readable, required):
+BLOCKING: true
+or
+BLOCKING: false
+
+Set BLOCKING to true if and only if there is at least one real Critical finding.
+Set BLOCKING to false if Critical is None / empty.
+
 DIFF:
 ```diff
 {diff}
@@ -127,16 +139,67 @@ DIFF:
 """
 
 
-def has_critical_findings(review_markdown: str) -> bool:
-    match = re.search(
-        r"\*\*Critical:\*\*\s*(.+?)(?:\n- \*\*|\n## |\Z)",
-        review_markdown,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    if not match:
+def extract_blocking_decision(review_text: str) -> tuple[str, bool | None]:
+    """Return (comment_markdown, explicit_blocking_or_None)."""
+    matches = list(BLOCKING_LINE_RE.finditer(review_text))
+    if not matches:
+        return review_text.strip(), None
+
+    last = matches[-1]
+    blocking = last.group(1).lower() == "true"
+    cleaned = BLOCKING_LINE_RE.sub("", review_text).strip()
+    return cleaned, blocking
+
+
+def _section_has_real_findings(section_body: str) -> bool:
+    body = section_body.strip()
+    if not body:
         return False
-    value = match.group(1).strip().lower()
-    return bool(value) and value not in {"none", "n/a", "na", "no", "-", "none."}
+
+    lowered = body.lower()
+    if lowered in NONE_VALUES:
+        return False
+
+    # Bullet list under a Critical heading.
+    bullets = re.findall(r"(?m)^\s*[-*]\s+(.+)$", body)
+    if bullets:
+        return any(bullet.strip().lower() not in NONE_VALUES for bullet in bullets)
+
+    # Single-line / inline Critical content.
+    first_line = body.splitlines()[0].strip().lower()
+    return first_line not in NONE_VALUES
+
+
+def has_critical_findings(review_markdown: str) -> bool:
+    """Detect Critical findings across common Gemini markdown shapes."""
+    # Shape A: "- **Critical:** ..."
+    inline = re.search(
+        r"(?is)\*\*Critical:\*\*\s*(.+?)(?=\n\s*-\s*\*\*|\n#{1,3}\s|\n##\s|\Z)",
+        review_markdown,
+    )
+    if inline and _section_has_real_findings(inline.group(1)):
+        return True
+
+    # Shape B: "### Critical" / "## Critical:" + following bullets until next heading.
+    heading = re.search(
+        r"(?im)^#{1,6}\s*Critical:?\s*$",
+        review_markdown,
+    )
+    if heading:
+        after = review_markdown[heading.end() :]
+        next_heading = re.search(r"(?m)^#{1,6}\s+", after)
+        section = after[: next_heading.start()] if next_heading else after
+        if _section_has_real_findings(section):
+            return True
+
+    return False
+
+
+def should_block_merge(review_text: str) -> tuple[str, bool]:
+    comment_markdown, explicit = extract_blocking_decision(review_text)
+    if explicit is not None:
+        return comment_markdown, explicit
+    return comment_markdown, has_critical_findings(comment_markdown)
 
 
 def main() -> int:
@@ -165,16 +228,17 @@ def main() -> int:
             print(f"Failed to post skip comment: {comment_exc}", file=sys.stderr)
         return 0
 
+    comment_markdown, blocking = should_block_merge(review)
     comment = (
         "## Gemini Code Review\n\n"
         f"_Model: `{model}`_\n\n"
-        f"{review}\n"
+        f"{comment_markdown}\n"
     )
     post_pr_comment(repo, pr_number, comment, token)
     print("Review posted successfully.")
 
     # Blocking is a review decision, not an API error: fail the Actions check only.
-    if has_critical_findings(review):
+    if blocking:
         print("Critical findings detected; failing the GitHub check.")
         return 1
     return 0
