@@ -40,3 +40,8 @@ buildNumber.properties
 # Archivos del sistema operativo (Windows/Mac)
 Thumbs.db
 .DS_Store
+
+# Secrets / local env (NEVER commit API keys)
+.env
+.env.local
+.env.*.local
