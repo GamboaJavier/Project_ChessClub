@@ -20,6 +20,10 @@ public class Player {
     // Empty constructor for JPA
     public Player() {}
 
+    public String getName() {
+        return firstName + " " + lastName;
+    }
+
     public Long getId() {
         return id;
     }
