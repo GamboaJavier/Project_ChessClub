@@ -5,6 +5,7 @@ import com.cactusmccoy.chessclub.dtos.PlayerResponseDto;
 import com.cactusmccoy.chessclub.models.Player;
 import com.cactusmccoy.chessclub.repositories.PlayerRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,6 +20,7 @@ public class PlayerService {
     }
 
     // Saves a new player in the database
+    @Transactional
     public PlayerResponseDto savePlayer(PlayerRequestDto request) {
         // 1. Convert DTO to Entity
         Player player = new Player();
@@ -41,6 +43,7 @@ public class PlayerService {
     }
 
     // Retrieves the list of all players
+    @Transactional(readOnly = true)
     public List<PlayerResponseDto> getAllPlayers() {
         return playerRepository.findAll()
                 .stream()
