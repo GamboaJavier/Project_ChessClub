@@ -48,7 +48,6 @@ def call_gemini(api_key: str, model: str, prompt: str) -> str:
         "generationConfig": {
             "temperature": 0.2,
             "maxOutputTokens": 8192,
-            "thinkingConfig": {"thinkingBudget": 0},
         },
     }
     url = GEMINI_ENDPOINT.format(model=model, key=api_key)
